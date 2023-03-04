@@ -121,7 +121,7 @@ class Diffusion(BaseModule):
         beta = self.beta_min + (self.beta_max - self.beta_min) * t
         return beta
 
-    def get_gamma(self, s, t, p=1.0, use_torch=False):
+    def get_gamma(self, s, t, p=1.0, use_torch=False):  # NOTE: e^(-0.5 * integral(beta) * p)
         beta_integral = self.beta_min + 0.5*(self.beta_max - self.beta_min)*(t + s)
         beta_integral *= (t - s)
         if use_torch:
@@ -154,7 +154,7 @@ class Diffusion(BaseModule):
         xt_mean = x0 * x0_weight + mean * mean_weight
         return xt_mean * mask
 
-    def forward_diffusion(self, x0, mask, mean, t):
+    def forward_diffusion(self, x0, mask, mean, t):  # NOTE: (3)
         xt_mean = self.compute_diffused_mean(x0, mask, mean, t, use_torch=True)
         variance = 1.0 - self.get_gamma(0, t, p=2.0, use_torch=True)
         z = torch.randn(x0.shape, dtype=x0.dtype, device=x0.device, requires_grad=False)
@@ -190,7 +190,7 @@ class Diffusion(BaseModule):
                     omega = 0.0
                     sigma = math.sqrt(beta_t * h)
                 dxt = (mean - xt) * (0.5 * beta_t * h + omega)
-                dxt -= self.estimator(xt, mask, mean, xt_ref, ref_mask, c, time) * (1.0 + kappa) * (beta_t * h)
+                dxt -= self.estimator(xt, mask, mean, xt_ref, ref_mask, c, time) * (1.0 + kappa) * (beta_t * h)  # NOTE: (12)
                 dxt += torch.randn_like(z, device=z.device) * sigma
             xt = (xt - dxt) * mask
         return xt
@@ -210,8 +210,8 @@ class Diffusion(BaseModule):
 #        for j in range(15):
 #            xt_ref += [self.compute_diffused_mean(x_ref, mask, mean_ref, (j+0.5)/15.0)]
         xt_ref = torch.stack(xt_ref, 1)
-        z_estimation = self.estimator(xt, mask, mean, xt_ref, mask, c, t)
-        z_estimation *= torch.sqrt(1.0 - self.get_gamma(0, t, p=2.0, use_torch=True))
+        z_estimation = self.estimator(xt, mask, mean, xt_ref, mask, c, t)  # Note: (7) mean, 'estimator' is supposed to be estimator of (5)
+        z_estimation *= torch.sqrt(1.0 - self.get_gamma(0, t, p=2.0, use_torch=True))  # Note: (7) variance
         loss = torch.sum((z_estimation + z)**2) / (torch.sum(mask)*self.n_feats)
         return loss
 
