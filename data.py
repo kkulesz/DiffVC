@@ -318,10 +318,12 @@ class VCDecBatchCollate(object):
         B = len(batch)
         mels1 = torch.zeros((B, n_mels, train_frames), dtype=torch.float32)
         mels2 = torch.zeros((B, n_mels, train_frames), dtype=torch.float32)
-        max_starts = [max(item['mel'].shape[-1] - train_frames, 0)
-                      for item in batch]
+
+        max_starts = [max(item['mel'].shape[-1] - train_frames, 0) for item in batch]
+
         starts1 = [random.choice(range(m)) if m > 0 else 0 for m in max_starts]
         starts2 = [random.choice(range(m)) if m > 0 else 0 for m in max_starts]
+
         mel_lengths = []
         for i, item in enumerate(batch):
             mel = item['mel']
@@ -332,6 +334,8 @@ class VCDecBatchCollate(object):
             mels1[i, :, :mel_length] = mel[:, starts1[i]:starts1[i] + mel_length]
             mels2[i, :, :mel_length] = mel[:, starts2[i]:starts2[i] + mel_length]
             mel_lengths.append(mel_length)
+
         mel_lengths = torch.LongTensor(mel_lengths)
         embed = torch.stack([item['c'] for item in batch], 0)
+
         return {'mel1': mels1, 'mel2': mels2, 'mel_lengths': mel_lengths, 'c': embed}

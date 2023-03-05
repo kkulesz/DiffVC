@@ -14,7 +14,7 @@ from model.modules import Mish, Upsample, Downsample, Rezero, Block, ResnetBlock
 from model.modules import LinearAttention, Residual, SinusoidalPosEmb, RefBlock
 
 
-class GradLogPEstimator(BaseModule):
+class GradLogPEstimator(BaseModule):  # NOTE: U-net
     def __init__(self, dim_base, dim_cond, use_ref_t, dim_mults=(1, 2, 4)):
         super(GradLogPEstimator, self).__init__()
         self.use_ref_t = use_ref_t
@@ -178,10 +178,10 @@ class Diffusion(BaseModule):
                 dxt = 0.5 * (mean - xt - self.estimator(xt, mask, mean, xt_ref, ref_mask, c, time)) * (beta_t * h)
             else:
                 if mode == 'ml':
-                    kappa = self.get_gamma(0, t - h) * (1.0 - self.get_gamma(t - h, t, p=2.0))
+                    kappa = self.get_gamma(0, t - h) * (1.0 - self.get_gamma(t - h, t, p=2.0))  # NOTE: error? nu(t-h, t) * (1-gamma(0, t, p=2)). At least if we look at (10)
                     kappa /= (self.get_gamma(0, t) * beta_t * h)
                     kappa -= 1.0
-                    omega = self.get_nu(t - h, t) / self.get_gamma(0, t)
+                    omega = self.get_nu(t - h, t) / self.get_gamma(0, t)  # NOTE: error? no idea where its from but definietly from (10)
                     omega += self.get_mu(t - h, t)
                     omega -= (0.5 * beta_t * h + 1.0)
                     sigma = self.get_sigma(t - h, t)
@@ -189,7 +189,7 @@ class Diffusion(BaseModule):
                     kappa = 0.0
                     omega = 0.0
                     sigma = math.sqrt(beta_t * h)
-                dxt = (mean - xt) * (0.5 * beta_t * h + omega)
+                dxt = (mean - xt) * (0.5 * beta_t * h + omega)  # NOTE: error? (mean-xt)*(0.5*omega)*(beta+t*h) Also, not sure about sign(+/-) of these operations. In (12) it is different
                 dxt -= self.estimator(xt, mask, mean, xt_ref, ref_mask, c, time) * (1.0 + kappa) * (beta_t * h)  # NOTE: (12)
                 dxt += torch.randn_like(z, device=z.device) * sigma
             xt = (xt - dxt) * mask
@@ -205,13 +205,21 @@ class Diffusion(BaseModule):
                                       n_timesteps, mode)
 
     def loss_t(self, x0, mask, mean, x_ref, mean_ref, c, t):
+        # NOTE:
+        # 1. calculate forward diffusion of X_0 based on (3): (a*X_0 + (1-a)*X_mean)*variance
+        # 2. calculate ONLY mean of X_ref/Y_target on (3)
+        # 3. estimate noise given (X_t, X_mean, X_t_ref , embedding, t) * variance. Based on (7) probably?
+        # 4. compare actual noise of forward diffusion and estimated one using MSE.
+        #       scale/divide it for some reason
+
         xt, z = self.forward_diffusion(x0, mask, mean, t)
         xt_ref = [self.compute_diffused_mean(x_ref, mask, mean_ref, t, use_torch=True)]
+        # NOTE: artifact of experimenting with input types mentioned in 2.2 Decoder section
 #        for j in range(15):
 #            xt_ref += [self.compute_diffused_mean(x_ref, mask, mean_ref, (j+0.5)/15.0)]
         xt_ref = torch.stack(xt_ref, 1)
-        z_estimation = self.estimator(xt, mask, mean, xt_ref, mask, c, t)  # Note: (7) mean, 'estimator' is supposed to be estimator of (5)
-        z_estimation *= torch.sqrt(1.0 - self.get_gamma(0, t, p=2.0, use_torch=True))  # Note: (7) variance
+        z_estimation = self.estimator(xt, mask, mean, xt_ref, mask, c, t)
+        z_estimation *= torch.sqrt(1.0 - self.get_gamma(0, t, p=2.0, use_torch=True))
         loss = torch.sum((z_estimation + z)**2) / (torch.sum(mask)*self.n_feats)
         return loss
 
