@@ -1,8 +1,9 @@
 torchaudio==0.5.1
-torch==1.5.1 # torchaudio depends on thsi version; was 1.7.1
+torch==1.7.1
 einops==0.3.0
-librosa==0.6.0
+librosa==0.6.3 # was 0.6.0 but: AttributeError: 'CacheManager' object has no attribute 'cachedir'
 numba==0.48 # librosa is bugged: "ModuleNotFoundError: No module named 'numba.decorators'"
+resampy==0.3.1 # 'guvectorize() missing 1 required positional argument: 'signature'
 webrtcvad==2.0.10
 numpy==1.19.0
 scipy==1.5.1
